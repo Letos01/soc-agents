@@ -137,8 +137,13 @@ investigator correlated it with the User-Agent injection on the same host in the
 |---|---|---|---|---|
 | `litellm/openrouter/google/gemini-2.5-flash` | 4/4 completed | 125 s | 3.0–4.5 KB | Default. Needed free-text clipping (see below) |
 | `litellm/openrouter/typesafe/jev-router` | 4/4 completed | 183 s | 5.3–7.1 KB | Routes each call to a different model, so runs are less reproducible |
+| same + `MODEL_EXTRA_BODY` `cost_tier: "low"`, `models: ["*flash*"]` | 4/4 completed | 176 s | — | Routed to `z-ai/glm-5.3-flash` and `deepseek/deepseek-v4.1-flash`, not Gemini |
+| same + `models: ["google/*flash*"]` | 4/4 completed | 196 s | — | Still GLM and DeepSeek: the include list did not pin the model |
 
-Neither run triggered a denied tool, a contract violation or the severity floor. Cost was not measured.
+No run triggered a denied tool, a contract violation or the severity floor. Cost was not measured. The model that
+actually answered is recorded per agent in the audit log (`models`), which is how the routing above was observed.
+The router plugin is passed with `MODEL_EXTRA_BODY`; a request with `excluded_models: ["*"]` returns the documented
+404, so the plugin does reach OpenRouter.
 
 ## Security design
 
@@ -190,6 +195,11 @@ Full analysis: [docs/threat-model.md](docs/threat-model.md). Design spec: [specs
   Gemini wrote an assessment longer than its 500-character field, on every attempt. Rejecting a bad id or enum is the point;
   rejecting a long paragraph is not. Free-text fields are now clipped, control fields still fail closed. The audit
   log now records which field broke (name and error type, never the value), which is how this was found in one run.
+- **A router's include list is a preference, not a pin.** Restricting the Jev router to `google/*flash*` still sent
+  every agent to GLM and DeepSeek. If you need one model for reproducible results, call that model directly; use
+  the router when you are happy for it to choose, and use `excluded_models` (which is enforced) to rule models out.
+- **Redaction by key name is blunt.** The audit redacts keys that look secret, and `tokens` matched `token`, so token
+  usage was being logged as `[redacted]`. Renamed to `usage`. Test what the audit actually records.
 - **Put the guarantees where a persuaded model can't reach them.** Severity floor, action list, banner and flag are
   all code. The models only write prose and fill schemas.
 
