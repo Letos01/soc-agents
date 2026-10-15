@@ -18,9 +18,17 @@ from soc_agents.policy import ALLOWLIST, is_allowed
 
 CID = new_correlation_id()
 TRIAGE = {
-    "alert_id": "1792083033.1009", "alert_time": "2026-10-15T16:20:33.066Z", "agent_id": "002",
-    "agent_name": "db-01", "rule_id": 550, "rule_level": 7, "severity": "medium",
-    "hypothesis_text": "x", "mitre_techniques": ["T1565.001"], "confidence": 0.5, "injection_suspected": False,
+    "alert_id": "1792083033.1009",
+    "alert_time": "2026-10-15T16:20:33.066Z",
+    "agent_id": "002",
+    "agent_name": "db-01",
+    "rule_id": 550,
+    "rule_level": 7,
+    "severity": "medium",
+    "hypothesis_text": "x",
+    "mitre_techniques": ["T1565.001"],
+    "confidence": 0.5,
+    "injection_suspected": False,
 }
 
 
@@ -91,7 +99,10 @@ def test_extract_security_handles_all_wrappings() -> None:
 
 def test_redact_and_audit(tmp_path) -> None:  # type: ignore[no-untyped-def]
     assert redact({"password": "hunter2", "api_key": "k", "ok": "v"}) == {
-        "password": "[redacted]", "api_key": "[redacted]", "ok": "v"}
+        "password": "[redacted]",
+        "api_key": "[redacted]",
+        "ok": "v",
+    }
     assert len(redact({"t": "x" * 1000})["t"]) < 260
     a = Audit(str(tmp_path / "a.jsonl"))
     a.write(kind="tool", token="secret-value", correlation_id=CID)
@@ -100,11 +111,17 @@ def test_redact_and_audit(tmp_path) -> None:  # type: ignore[no-untyped-def]
 
 
 def test_suggest_actions_are_code_derived_and_gated() -> None:
-    t = TriageResult.model_validate({**TRIAGE, "severity": "critical", "rule_level": 12,
-                                    "mitre_techniques": ["T1110.001"]})
-    e = EnrichmentResult.model_validate({
-        "agent_id": "002", "agent_name": "db-01", "agent_status": "active",
-        "vulnerabilities": [{"cve": "CVE-2024-5535", "severity": "Critical"}]})
+    t = TriageResult.model_validate(
+        {**TRIAGE, "severity": "critical", "rule_level": 12, "mitre_techniques": ["T1110.001"]}
+    )
+    e = EnrichmentResult.model_validate(
+        {
+            "agent_id": "002",
+            "agent_name": "db-01",
+            "agent_status": "active",
+            "vulnerabilities": [{"cve": "CVE-2024-5535", "severity": "Critical"}],
+        }
+    )
     actions = suggest_actions(t, e, None)
     kinds = {a.kind for a in actions}
     assert kinds == {"review_host_isolation", "review_credential_reset", "review_vulnerability_patch"}

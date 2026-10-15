@@ -19,11 +19,14 @@ from tests import fakes
 INJECTED_ID = "1792083033.1009"  # placeholder, resolved from the mock below
 
 
-def make_orchestrator(settings: Settings, *, triage: Any, reporter: Any | None = None, open_toolset: bool = False) -> tuple[Orchestrator, Audit]:
+def make_orchestrator(
+    settings: Settings, *, triage: Any, reporter: Any | None = None, open_toolset: bool = False
+) -> tuple[Orchestrator, Audit]:
     audit = Audit(settings.audit_path)
     agents = {
-        "triage": build_agent("triage", settings, audit, model=triage,
-                              toolset=_unfiltered(settings) if open_toolset else None),
+        "triage": build_agent(
+            "triage", settings, audit, model=triage, toolset=_unfiltered(settings) if open_toolset else None
+        ),
         "enrichment": build_agent("enrichment", settings, audit, model=fakes.enrichment_fake()),
         "investigator": build_agent("investigator", settings, audit, model=fakes.investigator_fake()),
         "reporter": build_agent("reporter", settings, audit, model=reporter or fakes.reporter_fake()),
@@ -33,8 +36,11 @@ def make_orchestrator(settings: Settings, *, triage: Any, reporter: Any | None =
 
 def _unfiltered(settings: Settings) -> McpToolset:
     """A misconfigured toolset exposing ALL seven tools: the guard callback must still deny out-of-role calls."""
-    params = StdioServerParameters(command=settings.node, args=[settings.mcp_path],
-                                   env={"PATH": __import__("os").environ["PATH"], "LOG_LEVEL": "warn", **settings.wazuh_env})
+    params = StdioServerParameters(
+        command=settings.node,
+        args=[settings.mcp_path],
+        env={"PATH": __import__("os").environ["PATH"], "LOG_LEVEL": "warn", **settings.wazuh_env},
+    )
     return McpToolset(connection_params=StdioConnectionParams(server_params=params, timeout=20.0))
 
 
@@ -47,8 +53,11 @@ async def first_alert_ids(settings: Settings) -> dict[str, str]:
     from mcp import ClientSession
     from mcp.client.stdio import stdio_client
 
-    params = StdioServerParameters(command=settings.node, args=[settings.mcp_path],
-                                   env={"PATH": __import__("os").environ["PATH"], "LOG_LEVEL": "warn", **settings.wazuh_env})
+    params = StdioServerParameters(
+        command=settings.node,
+        args=[settings.mcp_path],
+        env={"PATH": __import__("os").environ["PATH"], "LOG_LEVEL": "warn", **settings.wazuh_env},
+    )
     async with stdio_client(params) as (r, w), ClientSession(r, w) as s:
         await s.initialize()
         res = await s.call_tool("search_alerts", {"rule_level_min": 3, "limit": 50})

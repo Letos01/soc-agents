@@ -51,7 +51,9 @@ class ScriptedLlm(BaseLlm):
     final: Any = None
     calls: list[str] = []
 
-    async def generate_content_async(self, llm_request: LlmRequest, stream: bool = False) -> AsyncGenerator[LlmResponse, None]:
+    async def generate_content_async(
+        self, llm_request: LlmRequest, stream: bool = False
+    ) -> AsyncGenerator[LlmResponse, None]:
         payload, results = user_payload(llm_request), tool_results(llm_request)
         done = len(results)
         if done < len(self.steps):
@@ -92,7 +94,10 @@ def triage_fake(*, window: bool = False, persuaded: bool = False) -> ScriptedLlm
             }
         )
 
-    get_alert: Step = ("get_alert", lambda p, r: {"alert_id": p.get("alert_id") or r["search_alerts"]["alerts"][0]["id"]})
+    get_alert: Step = (
+        "get_alert",
+        lambda p, r: {"alert_id": p.get("alert_id") or r["search_alerts"]["alerts"][0]["id"]},
+    )
     steps: list[Step] = [get_alert]
     if window:
         steps.insert(0, ("search_alerts", lambda p, r: {"time_from": p["time_from"], "rule_level_min": 7, "limit": 10}))
@@ -135,8 +140,13 @@ def investigator_fake() -> ScriptedLlm:
             {
                 "related_alert_count": len(alerts),
                 "timeline": [
-                    {"alert_id": a["id"], "timestamp": a["timestamp"], "rule_id": int(a["rule"]["id"]),
-                     "rule_level": a["rule"]["level"], "summary_text": str(a["rule"]["description"])[:150]}
+                    {
+                        "alert_id": a["id"],
+                        "timestamp": a["timestamp"],
+                        "rule_id": int(a["rule"]["id"]),
+                        "rule_level": a["rule"]["level"],
+                        "summary_text": str(a["rule"]["description"])[:150],
+                    }
                     for a in alerts[:10]
                 ],
                 "top_techniques": [g["key"] for g in r["alert_stats"].get("groups", [])][:5],
@@ -147,8 +157,24 @@ def investigator_fake() -> ScriptedLlm:
 
     return ScriptedLlm(
         steps=[
-            ("search_alerts", lambda p, r: {"agent_id": p["agent_id"], "time_from": p["time_from"], "time_to": p["time_to"], "limit": 30}),
-            ("alert_stats", lambda p, r: {"group_by": "mitre_technique", "agent_id": p["agent_id"], "time_from": p["time_from"], "time_to": p["time_to"]}),
+            (
+                "search_alerts",
+                lambda p, r: {
+                    "agent_id": p["agent_id"],
+                    "time_from": p["time_from"],
+                    "time_to": p["time_to"],
+                    "limit": 30,
+                },
+            ),
+            (
+                "alert_stats",
+                lambda p, r: {
+                    "group_by": "mitre_technique",
+                    "agent_id": p["agent_id"],
+                    "time_from": p["time_from"],
+                    "time_to": p["time_to"],
+                },
+            ),
         ],
         final=final,
     )
@@ -169,3 +195,10 @@ def reporter_fake(*, obey: bool = False) -> ScriptedLlm:
         return body
 
     return ScriptedLlm(steps=[], final=final)
+
+
+def persuaded_triage() -> ScriptedLlm:
+    """A triage model fully taken over by the log: it also tries a tool outside its role (get_agent)."""
+    llm = triage_fake(persuaded=True)
+    llm.steps = [*llm.steps, ("get_agent", lambda p, r: {"agent_id": r["get_alert"]["agent"]["id"]})]
+    return llm
