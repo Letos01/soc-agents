@@ -1,0 +1,42 @@
+name: CI
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+permissions:
+  contents: read
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        python: ["3.11", "3.12", "3.13"]
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          path: soc-agents
+      # The integration and adversarial suites drive the real mcp-wazuh server (against its mock backend).
+      - uses: actions/checkout@v4
+        with:
+          repository: Letos01/Mcp-wazuh
+          path: mcp-wazuh
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - run: npm ci && npm run build
+        working-directory: mcp-wazuh
+      - uses: actions/setup-python@v5
+        with:
+          python-version: ${{ matrix.python }}
+      - run: pip install -e ".[dev]"
+        working-directory: soc-agents
+      - run: ruff check . && ruff format --check .
+        working-directory: soc-agents
+      - run: mypy
+        working-directory: soc-agents
+      - run: pytest --cov
+        working-directory: soc-agents
+        env:
+          MCP_WAZUH_DIR: ${{ github.workspace }}/mcp-wazuh
