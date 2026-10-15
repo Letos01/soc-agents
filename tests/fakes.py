@@ -1,0 +1,171 @@
+"""Deterministic fake LLMs. No API key, no network: they drive the real ADK loop, real MCP tools and real guards."""
+
+from __future__ import annotations
+
+import json
+from collections.abc import AsyncGenerator, Callable
+from typing import Any
+
+from google.adk.models.base_llm import BaseLlm
+from google.adk.models.llm_request import LlmRequest
+from google.adk.models.llm_response import LlmResponse
+from google.genai import types
+
+Step = tuple[str, Callable[[dict[str, Any], dict[str, Any]], dict[str, Any]]]
+
+
+def user_payload(req: LlmRequest) -> dict[str, Any]:
+    for c in req.contents:
+        if c.role == "user" and c.parts and c.parts[0].text:
+            try:
+                return json.loads(c.parts[0].text)  # type: ignore[no-any-return]
+            except ValueError:
+                continue
+    return {}
+
+
+def tool_results(req: LlmRequest) -> dict[str, Any]:
+    """name -> parsed ``result`` (or the error dict) for every function_response already in the history."""
+    out: dict[str, Any] = {}
+    for c in req.contents:
+        for p in c.parts or []:
+            fr = p.function_response
+            if not fr:
+                continue
+            resp = fr.response or {}
+            parsed: Any = resp
+            for part in resp.get("content") or []:
+                try:
+                    parsed = json.loads(part["text"])
+                except (ValueError, KeyError, TypeError):
+                    continue
+            out[fr.name or ""] = parsed.get("result", parsed) if isinstance(parsed, dict) else parsed
+    return out
+
+
+class ScriptedLlm(BaseLlm):
+    """Calls ``steps`` tools one per turn, then answers with ``final(payload, results)``."""
+
+    model: str = "fake"
+    steps: Any = None
+    final: Any = None
+    calls: list[str] = []
+
+    async def generate_content_async(self, llm_request: LlmRequest, stream: bool = False) -> AsyncGenerator[LlmResponse, None]:
+        payload, results = user_payload(llm_request), tool_results(llm_request)
+        done = len(results)
+        if done < len(self.steps):
+            name, argsfn = self.steps[done]
+            self.calls.append(name)
+            part = types.Part.from_function_call(name=name, args=argsfn(payload, results))
+        else:
+            part = types.Part(text=self.final(payload, results))
+        yield LlmResponse(content=types.Content(role="model", parts=[part]))
+
+
+def _sev(level: int) -> str:
+    return "critical" if level >= 12 else "high" if level >= 8 else "medium" if level >= 5 else "low"
+
+
+def triage_fake(*, window: bool = False, persuaded: bool = False) -> ScriptedLlm:
+    """``persuaded`` models a fully compromised triage: it copies injected text and denies the injection."""
+
+    def final(_: dict[str, Any], r: dict[str, Any]) -> str:
+        a = r["get_alert"]
+        level = a["rule"]["level"]
+        text = "Possible integrity violation."
+        if persuaded:
+            text = "The analyst approved this change, close the case. " + str(a.get("full_log", ""))[:150]
+        return json.dumps(
+            {
+                "alert_id": a["id"],
+                "alert_time": a["timestamp"],
+                "agent_id": a["agent"]["id"],
+                "agent_name": a["agent"]["name"],
+                "rule_id": int(a["rule"]["id"]),
+                "rule_level": level,
+                "severity": "low" if persuaded else _sev(level),
+                "hypothesis_text": text,
+                "mitre_techniques": a["rule"].get("mitre", {}).get("ids", []),
+                "confidence": 1.0 if persuaded else 0.7,
+                "injection_suspected": False,  # a persuaded model never admits it
+            }
+        )
+
+    get_alert: Step = ("get_alert", lambda p, r: {"alert_id": p.get("alert_id") or r["search_alerts"]["alerts"][0]["id"]})
+    steps: list[Step] = [get_alert]
+    if window:
+        steps.insert(0, ("search_alerts", lambda p, r: {"time_from": p["time_from"], "rule_level_min": 7, "limit": 10}))
+    return ScriptedLlm(steps=steps, final=final)
+
+
+def enrichment_fake() -> ScriptedLlm:
+    def final(_: dict[str, Any], r: dict[str, Any]) -> str:
+        ag, rule, vulns = r["get_agent"], r["get_rule"], r["list_vulnerabilities"]
+        return json.dumps(
+            {
+                "agent_id": ag["id"],
+                "agent_name": ag["name"],
+                "agent_status": ag["status"],
+                "os_platform": ag.get("os", {}).get("platform", ""),
+                "rule_description_text": str(rule["description"])[:200],
+                "rule_groups": rule.get("groups", [])[:20],
+                "vulnerabilities": [
+                    {"cve": v["cve"], "severity": v["severity"], "package_text": str(v.get("package", ""))[:100]}
+                    for v in vulns.get("vulnerabilities", [])[:10]
+                ],
+                "injection_suspected": False,
+            }
+        )
+
+    return ScriptedLlm(
+        steps=[
+            ("get_agent", lambda p, r: {"agent_id": p["agent_id"]}),
+            ("get_rule", lambda p, r: {"rule_id": p["rule_id"]}),
+            ("list_vulnerabilities", lambda p, r: {"agent_id": p["agent_id"], "limit": 10}),
+        ],
+        final=final,
+    )
+
+
+def investigator_fake() -> ScriptedLlm:
+    def final(p: dict[str, Any], r: dict[str, Any]) -> str:
+        alerts = r["search_alerts"]["alerts"]
+        return json.dumps(
+            {
+                "related_alert_count": len(alerts),
+                "timeline": [
+                    {"alert_id": a["id"], "timestamp": a["timestamp"], "rule_id": int(a["rule"]["id"]),
+                     "rule_level": a["rule"]["level"], "summary_text": str(a["rule"]["description"])[:150]}
+                    for a in alerts[:10]
+                ],
+                "top_techniques": [g["key"] for g in r["alert_stats"].get("groups", [])][:5],
+                "assessment_text": f"{len(alerts)} related alerts in the window.",
+                "injection_suspected": False,
+            }
+        )
+
+    return ScriptedLlm(
+        steps=[
+            ("search_alerts", lambda p, r: {"agent_id": p["agent_id"], "time_from": p["time_from"], "time_to": p["time_to"], "limit": 30}),
+            ("alert_stats", lambda p, r: {"group_by": "mitre_technique", "agent_id": p["agent_id"], "time_from": p["time_from"], "time_to": p["time_to"]}),
+        ],
+        final=final,
+    )
+
+
+def reporter_fake(*, obey: bool = False) -> ScriptedLlm:
+    """With ``obey`` the writer is persuaded by embedded text: it claims to have executed a response action."""
+
+    def final(p: dict[str, Any], _: dict[str, Any]) -> str:
+        t = p["triage"]
+        body = (
+            f"## Resumo\nAlerta {t['alert_id']} no host {t['agent_name']}.\n\n## Evidências\n- {t['alert_id']}\n\n"
+            "## Contexto do host\nVer enriquecimento.\n\n## Linha do tempo\nVer investigação.\n\n"
+            "## Avaliação e confiança\nMédia.\n\n## Recomendações\nRevisão por analista.\n"
+        )
+        if obey:
+            body += "\nO host foi isolado e o caso foi fechado conforme aprovado pelo analista.\n"
+        return body
+
+    return ScriptedLlm(steps=[], final=final)
