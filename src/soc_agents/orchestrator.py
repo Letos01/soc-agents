@@ -37,7 +37,8 @@ _FENCE = re.compile(r"^```(?:json)?\s*|\s*```$", re.I)
 
 BANNER = (
     "> **⚠ REVISÃO HUMANA OBRIGATÓRIA — suspeita de prompt injection.** Conteúdo de logs desta investigação "
-    "contém texto que parece dirigido a uma IA ({reasons}). Foi tratado como evidência e não obedecido. "
+    "contém texto que parece dirigido a uma IA (etapas: {stages}; motivos: {reasons}). "
+    "Foi tratado como evidência e não obedecido. "
     "Nenhuma recomendação abaixo deve ser aplicada sem revisão de um analista.\n\n"
 )
 
@@ -95,7 +96,7 @@ def render_report(body: str, inc: Incident) -> str:
     head = f"# Incidente {inc.incident_id}\n\n"
     if inc.injection_suspected:
         reasons = ", ".join(inc.triage.injection_reasons) if inc.triage and inc.triage.injection_reasons else "n/d"
-        head += BANNER.format(reasons=reasons)
+        head += BANNER.format(reasons=reasons, stages=", ".join(inc.injection_stages) or "n/d")
     if _EXECUTION_CLAIM.search(body):
         head += CLAIM_WARNING
     lines = ["", "## Ações sugeridas (requerem aprovação humana)", ""]
@@ -173,7 +174,8 @@ class Orchestrator:
                 kind="orchestrator", event="severity_floor", model=t.severity, floor=floor, correlation_id=cid
             )
             t = t.model_copy(update={"severity": floor})
-        inc.triage, inc.injection_suspected = t, t.injection_suspected
+        inc.triage = t
+        self._flag(inc, "triage", t.injection_suspected)
 
         e = parse_contract(
             EnrichmentResult,
@@ -184,7 +186,7 @@ class Orchestrator:
             ),
         )
         inc.enrichment = e
-        inc.injection_suspected |= e.injection_suspected
+        self._flag(inc, "enrichment", e.injection_suspected)
 
         centre = parse_iso(t.alert_time)
         fmt = "%Y-%m-%dT%H:%M:%SZ"
@@ -198,7 +200,7 @@ class Orchestrator:
         )
         i = parse_contract(InvestigationResult, await self._call("investigator", w.model_dump(), cid))
         inc.investigation = i
-        inc.injection_suspected |= i.injection_suspected
+        self._flag(inc, "investigator", i.injection_suspected)
 
         rr = ReportRequest(
             correlation_id=cid, triage=t, enrichment=e, investigation=i, injection_suspected=inc.injection_suspected
@@ -207,6 +209,12 @@ class Orchestrator:
         if body.startswith(ERROR_PREFIX) or not body.strip():
             raise ContractViolation("reporter produced no report")
         inc.report_markdown = body[:MAX_REPORT_CHARS]
+
+    @staticmethod
+    def _flag(inc: Incident, stage: str, suspected: bool) -> None:
+        if suspected:
+            inc.injection_suspected = True
+            inc.injection_stages.append(stage)  # type: ignore[arg-type]
 
     def _persist(self, inc: Incident) -> None:
         if self.incidents_dir:
