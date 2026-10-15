@@ -29,6 +29,9 @@ OUTPUT_CONTRACTS: dict[str, type[BaseModel]] = {
 MAX_REPORT_CHARS = 8000
 _FENCE = re.compile(r"^```(?:json)?\s*|\s*```$", re.I)
 ERROR_PREFIX = "CONTRACT_VIOLATION:"
+# Marks a response produced by before_tool. ADK still runs after_tool callbacks on it (the tool itself does not run),
+# so after_tool must not audit it as a successful call.
+DENIED = "_guard_denied"
 
 
 def extract_security(tool_response: Any) -> dict[str, Any]:
@@ -108,7 +111,7 @@ class Guard:
                 reason="not_in_allowlist",
                 correlation_id=self._cid(state),
             )
-            return {"error": "tool_not_allowed", "tool": name}
+            return {"error": "tool_not_allowed", "tool": name, DENIED: True}
         calls = int(state.get("tool_calls", 0)) + 1
         if calls > self.limits.max_tool_calls:
             self.audit.write(
@@ -119,7 +122,7 @@ class Guard:
                 reason="tool_budget",
                 correlation_id=self._cid(state),
             )
-            return {"error": "tool_budget_exceeded"}
+            return {"error": "tool_budget_exceeded", DENIED: True}
         state["tool_calls"] = calls
         self.audit.write(
             kind="tool", role=self.role, name=name, params=args, outcome="call", correlation_id=self._cid(state)
@@ -128,6 +131,8 @@ class Guard:
 
     def after_tool(self, tool: Any, args: dict[str, Any], tool_context: Any, tool_response: Any) -> None:
         state = tool_context.state
+        if isinstance(tool_response, dict) and tool_response.get(DENIED):
+            return None
         sec = extract_security(tool_response)
         suspected = bool(sec.get("injection_suspected"))
         if suspected:
