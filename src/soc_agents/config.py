@@ -41,13 +41,15 @@ class Settings:
     node: str = "node"
     wazuh_env: Mapping[str, str] = field(default_factory=dict)
     host: str = "127.0.0.1"
+    public_host: str = "127.0.0.1"  # host written into each Agent Card (a service name under docker compose)
+    urls: Mapping[str, str] = field(default_factory=dict)  # per-role override of where the orchestrator calls
     ports: Mapping[str, int] = field(default_factory=lambda: dict(DEFAULT_PORTS))
     limits: Limits = field(default_factory=Limits)
     audit_path: str = "./audit/audit.jsonl"
     incidents_dir: str = "./incidents"
 
     def agent_url(self, role: str) -> str:
-        return f"http://{self.host}:{self.ports[role]}"
+        return self.urls.get(role) or f"http://{self.host}:{self.ports[role]}"
 
     @classmethod
     def from_env(cls, env: Mapping[str, str] | None = None) -> Settings:
@@ -66,6 +68,8 @@ class Settings:
             node=e.get("NODE_BIN", "node"),
             wazuh_env={k: e[k] for k in _WAZUH_KEYS if k in e},
             host=e.get("AGENT_HOST", "127.0.0.1"),
+            public_host=e.get("AGENT_PUBLIC_HOST", e.get("AGENT_HOST", "127.0.0.1")),
+            urls={r: e[f"{r.upper()}_URL"] for r in ROLES if f"{r.upper()}_URL" in e},
             ports=ports,
             limits=limits,
             audit_path=e.get("AUDIT_LOG_PATH", "./audit/audit.jsonl"),

@@ -12,5 +12,5 @@ from soc_agents.config import Settings
 
 def serve(role: str, settings: Settings) -> None:
     agent = build_agent(role, settings, Audit(settings.audit_path))
-    app = to_a2a(agent, host=settings.host, port=settings.ports[role])
+    app = to_a2a(agent, host=settings.public_host, port=settings.ports[role])
     uvicorn.run(app, host=settings.host, port=settings.ports[role], log_level="warning")

@@ -26,6 +26,8 @@ def _free_port() -> int:
 @pytest.fixture(scope="session")
 def mock_wazuh() -> Iterator[dict[str, str]]:
     if not MCP_DIST.exists() or not (MCP_DIR / "scripts" / "mock-wazuh.mjs").exists():
+        if os.environ.get("CI"):  # never let the security suites silently skip in CI
+            pytest.fail(f"mcp-wazuh not built at {MCP_DIR}")
         pytest.skip(f"mcp-wazuh not built at {MCP_DIR} (set MCP_WAZUH_DIR; run npm ci && npm run build)")
     api, idx = _free_port(), _free_port()
     proc = subprocess.Popen(  # noqa: S603

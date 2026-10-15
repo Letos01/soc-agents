@@ -54,3 +54,5 @@ def test_settings_from_env() -> None:
     assert dict(s.wazuh_env) == {"WAZUH_API_PASSWORD": "p"}
     assert s.agent_url("triage") == "http://127.0.0.1:9999"
     assert s.limits.per_agent_tokens == 15000
+    s2 = Settings.from_env({"REPORTER_URL": "http://reporter:9104"})
+    assert s2.agent_url("reporter") == "http://reporter:9104"
