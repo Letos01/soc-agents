@@ -111,7 +111,7 @@ def build_agent(
     return LlmAgent(
         name=role,
         description=f"SOC {role} agent",
-        model=model if model is not None else resolve_model(settings.model),
+        model=model if model is not None else resolve_model(settings.model, settings.model_extra_body),
         instruction=INSTRUCTIONS[role],
         tools=tools,
         disallow_transfer_to_parent=True,

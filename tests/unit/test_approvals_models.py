@@ -46,6 +46,13 @@ def test_model_resolution() -> None:
     assert resolve_model("gemini-2.5-flash") == "gemini-2.5-flash"
     pytest.importorskip("litellm")
     assert resolve_model("litellm/anthropic/claude-sonnet-4-5").model == "anthropic/claude-sonnet-4-5"
+    body = '{"plugins": [{"id": "jev-router", "cost_tier": "low", "models": ["*flash*"]}]}'
+    m = resolve_model("litellm/openrouter/typesafe/jev-router", body)
+    assert m._additional_args["extra_body"]["plugins"][0]["cost_tier"] == "low"
+    with pytest.raises(ValueError):
+        resolve_model("litellm/openrouter/x", "[1]")
+    with pytest.raises(ValueError):
+        resolve_model("gemini-2.5-flash", body)
 
 
 def test_settings_from_env() -> None:

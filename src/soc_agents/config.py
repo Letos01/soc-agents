@@ -37,6 +37,7 @@ class Limits:
 @dataclass(frozen=True)
 class Settings:
     model: str = "gemini-2.5-flash"
+    model_extra_body: str = ""  # JSON object sent with every LiteLLM request (e.g. OpenRouter router plugins)
     mcp_path: str = "../mcp-wazuh/dist/index.js"
     node: str = "node"
     wazuh_env: Mapping[str, str] = field(default_factory=dict)
@@ -64,6 +65,7 @@ class Settings:
         ports = {r: int(e.get(f"{r.upper()}_PORT", DEFAULT_PORTS[r])) for r in ROLES}
         return cls(
             model=e.get("MODEL", "gemini-2.5-flash"),
+            model_extra_body=e.get("MODEL_EXTRA_BODY", ""),
             mcp_path=e.get("MCP_WAZUH_PATH", "../mcp-wazuh/dist/index.js"),
             node=e.get("NODE_BIN", "node"),
             wazuh_env={k: e[k] for k in _WAZUH_KEYS if k in e},
