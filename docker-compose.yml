@@ -1,0 +1,46 @@
+# Four A2A agent servers. The orchestrator is the CLI:
+#   docker compose up -d --build
+#   docker compose run --rm cli investigate --alert-id 1729000000.1234
+# Needs ../mcp-wazuh built (npm ci && npm run build) and a .env (see .env.example).
+x-agent: &agent
+  build: .
+  env_file: .env
+  environment: &agent-env
+    AGENT_HOST: 0.0.0.0
+  volumes:
+    - ../mcp-wazuh:/opt/mcp-wazuh:ro
+    - ./data:/data
+  read_only: true
+  tmpfs: [/tmp]
+  cap_drop: [ALL]
+  security_opt: ["no-new-privileges:true"]
+  restart: unless-stopped
+  extra_hosts: ["host.docker.internal:host-gateway"]
+
+services:
+  triage:
+    <<: *agent
+    command: ["serve", "triage"]
+    environment: { <<: *agent-env, AGENT_PUBLIC_HOST: triage }
+  enrichment:
+    <<: *agent
+    command: ["serve", "enrichment"]
+    environment: { <<: *agent-env, AGENT_PUBLIC_HOST: enrichment }
+  investigator:
+    <<: *agent
+    command: ["serve", "investigator"]
+    environment: { <<: *agent-env, AGENT_PUBLIC_HOST: investigator }
+  reporter:
+    <<: *agent
+    command: ["serve", "reporter"]
+    environment: { <<: *agent-env, AGENT_PUBLIC_HOST: reporter }
+  cli:
+    <<: *agent
+    profiles: [cli]
+    restart: "no"
+    depends_on: [triage, enrichment, investigator, reporter]
+    environment:
+      TRIAGE_URL: http://triage:9101
+      ENRICHMENT_URL: http://enrichment:9102
+      INVESTIGATOR_URL: http://investigator:9103
+      REPORTER_URL: http://reporter:9104
