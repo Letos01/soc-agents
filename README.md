@@ -63,7 +63,7 @@ flowchart LR
 ## Quickstart (5 minutes)
 
 Requirements: Python 3.11+, Node 22.12+, a built [mcp-wazuh](https://github.com/Letos01/Mcp-wazuh) next to this repo,
-and a Gemini API key (or any LiteLLM model, e.g. Claude).
+and an OpenRouter key (or a Gemini / Anthropic key).
 
 ```bash
 git clone https://github.com/Letos01/Mcp-wazuh ../mcp-wazuh && (cd ../mcp-wazuh && npm ci && npm run build)
@@ -74,7 +74,7 @@ pytest                                    # no API key needed: fake LLMs + the m
 Against a Wazuh: start the lab from mcp-wazuh (`./scripts/lab-up.sh`), then:
 
 ```bash
-cp .env.example .env                      # MODEL, GOOGLE_API_KEY, WAZUH_* (mcp-reader), TLS_INSECURE=true for the lab
+cp .env.example .env                      # OPENROUTER_API_KEY, WAZUH_* (mcp-reader), TLS_INSECURE=true for the lab
 set -a && . ./.env && set +a
 soc-agents investigate --last 1h --local  # all agents in-process
 ```
@@ -89,8 +89,15 @@ soc-agents approve <incident-id> A1 --decision approve --by leo   # records the 
 
 With Docker: `docker compose up -d --build`, then `docker compose run --rm cli investigate --last 1h`.
 
-Other providers go through LiteLLM: `MODEL=litellm/openrouter/google/gemini-2.5-flash` with `OPENROUTER_API_KEY`,
-or `MODEL=litellm/anthropic/claude-sonnet-4-5` with `ANTHROPIC_API_KEY`.
+Two model profiles ship in `.env.example`, both through OpenRouter (`OPENROUTER_API_KEY`):
+
+| Profile | Settings | Use it when |
+|---|---|---|
+| **Default** | `MODEL=litellm/openrouter/google/gemini-2.5-flash` | You want the same model every run (demos, comparisons, CI-like checks) |
+| **Economy** | `MODEL=litellm/openrouter/typesafe/jev-router` + `MODEL_EXTRA_BODY` with `cost_tier: "low"` and `excluded_models` | You want the cheapest model that does the job and accept that it changes per call |
+
+Other providers work too: `MODEL=gemini-2.5-flash` with `GOOGLE_API_KEY`, or `MODEL=litellm/anthropic/<model>` with
+`ANTHROPIC_API_KEY`.
 
 ## Example output
 
