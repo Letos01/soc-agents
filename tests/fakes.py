@@ -105,19 +105,22 @@ def triage_fake(*, window: bool = False, persuaded: bool = False) -> ScriptedLlm
 
 
 def enrichment_fake() -> ScriptedLlm:
-    def final(_: dict[str, Any], r: dict[str, Any]) -> str:
+    def final(p: dict[str, Any], r: dict[str, Any]) -> str:
         ag, rule, vulns = r["get_agent"], r["get_rule"], r["list_vulnerabilities"]
+        found = isinstance(ag, dict) and "id" in ag
+        if not found:
+            ag = {}
         return json.dumps(
             {
-                "agent_id": ag["id"],
-                "agent_name": ag["name"],
-                "agent_status": ag["status"],
+                "agent_id": p["agent_id"],
+                "agent_name": ag.get("name"),
+                "agent_status": ag.get("status", "unknown"),
                 "os_platform": ag.get("os", {}).get("platform", ""),
                 "rule_description_text": str(rule["description"])[:200],
                 "rule_groups": rule.get("groups", [])[:20],
                 "vulnerabilities": [
                     {"cve": v["cve"], "severity": v["severity"], "package_text": str(v.get("package", ""))[:100]}
-                    for v in vulns.get("vulnerabilities", [])[:10]
+                    for v in (vulns.get("vulnerabilities", []) if isinstance(vulns, dict) else [])[:10]
                 ],
                 "injection_suspected": False,
             }
