@@ -181,15 +181,26 @@ class Guard:
         state["tokens"] = used
         if used > self.limits.per_agent_tokens:
             self.audit.write(
-                kind="agent", role=self.role, event="token_budget", tokens=used, correlation_id=self._cid(state)
+                kind="agent", role=self.role, event="token_budget", usage=used, correlation_id=self._cid(state)
             )
             return _reply(f"{ERROR_PREFIX} token budget exceeded")
+        version = getattr(llm_response, "model_version", None)
+        if version:  # which model actually answered (routers such as Jev pick one per request)
+            state["models"] = sorted({*state.get("models", []), str(version)[:80]})
         text, has_call = _text_of(llm_response)
         if has_call or text is None:
             return None
         if self.role == "reporter":
             if len(text) > MAX_REPORT_CHARS:
                 return _reply(f"{ERROR_PREFIX} report too long")
+            self.audit.write(
+                kind="agent",
+                role=self.role,
+                event="done",
+                models=state.get("models", []),
+                usage=used,
+                correlation_id=self._cid(state),
+            )
             return None
         try:
             clean = coerce_output(
@@ -213,6 +224,8 @@ class Guard:
             role=self.role,
             event="done",
             injection_suspected=bool(state.get("injection_suspected")),
+            models=state.get("models", []),
+            usage=used,
             correlation_id=self._cid(state),
         )
         return _reply(clean)
