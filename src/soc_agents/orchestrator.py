@@ -42,6 +42,25 @@ BANNER = (
 )
 
 
+_SEVERITY_ORDER = ("low", "medium", "high", "critical")
+# Claims that something was executed. This system cannot execute anything, so such a sentence is either a
+# hallucination or the result of injected text; the report is flagged instead of trusted.
+_EXECUTION_CLAIM = re.compile(
+    r"\b(foi|foram|was|were|has been|have been)\s+(isolad[oa]s?|bloquead[oa]s?|fechad[oa]s?|encerrad[oa]s?|"
+    r"isolated|blocked|closed|quarantined|remediated|executad[oa]s?|executed)\b",
+    re.I,
+)
+CLAIM_WARNING = (
+    "> **⚠ Atenção:** o texto abaixo afirma que alguma ação foi executada. Este sistema não executa ações; "
+    "trate essa afirmação como incorreta.\n\n"
+)
+
+
+def severity_floor(level: int) -> str:
+    """Severity implied by the Wazuh rule level. Rule levels come from rule config, not from log text."""
+    return "critical" if level >= 12 else "high" if level >= 8 else "medium" if level >= 5 else "low"
+
+
 def parse_contract(model: type[T], text: str) -> T:
     if text.startswith(ERROR_PREFIX):
         raise ContractViolation(text)
@@ -77,9 +96,12 @@ def render_report(body: str, inc: Incident) -> str:
     if inc.injection_suspected:
         reasons = ", ".join(inc.triage.injection_reasons) if inc.triage and inc.triage.injection_reasons else "n/d"
         head += BANNER.format(reasons=reasons)
+    if _EXECUTION_CLAIM.search(body):
+        head += CLAIM_WARNING
     lines = ["", "## Ações sugeridas (requerem aprovação humana)", ""]
     for a in inc.suggested_actions:
         lines.append(f"- `{a.id}` **{a.kind}** em `{a.target}` — {a.rationale_text} _(status: {a.status})_")
+    lines += ["", "_Nenhuma ação foi executada por este sistema. Decisões: `soc-agents approve <incidente> <ação>`._"]
     return head + body.strip() + "\n" + "\n".join(lines) + "\n"
 
 
@@ -116,6 +138,9 @@ class Orchestrator:
         except (ContractViolation, ValidationError, TimeoutError) as exc:
             inc.error = f"{type(exc).__name__}: {exc}"[:300]
             self.audit.write(kind="orchestrator", event="failed", error=inc.error, correlation_id=cid)
+        except Exception as exc:  # an agent crashed: fail closed, keep details out of the report
+            inc.error = f"agent_error: {type(exc).__name__}"
+            self.audit.write(kind="orchestrator", event="failed", error=inc.error, correlation_id=cid)
         inc.steps = self._steps
         if inc.triage:
             inc.suggested_actions = suggest_actions(inc.triage, inc.enrichment, inc.investigation)
@@ -141,6 +166,13 @@ class Orchestrator:
         else:
             req = TriageRequest(correlation_id=cid, time_from=_since(last or "1h"))
         t = parse_contract(TriageResult, await self._call("triage", req.model_dump(exclude_none=True), cid))
+        floor = severity_floor(t.rule_level)
+        if _SEVERITY_ORDER.index(t.severity) < _SEVERITY_ORDER.index(floor):
+            # Injected text ("mark as benign") must not be able to downgrade below what the rule itself says.
+            self.audit.write(
+                kind="orchestrator", event="severity_floor", model=t.severity, floor=floor, correlation_id=cid
+            )
+            t = t.model_copy(update={"severity": floor})
         inc.triage, inc.injection_suspected = t, t.injection_suspected
 
         e = parse_contract(
