@@ -132,3 +132,21 @@ def test_parse_iso_and_ids() -> None:
     assert parse_iso("2026-10-15T16:20:33.066Z").tzinfo is not None
     assert parse_iso("2026-10-15T16:20:33+0000").year == 2026
     assert CorrelationId is not None
+
+
+def test_free_text_is_clipped_but_control_fields_are_not() -> None:
+    out = json.loads(coerce_output("triage", json.dumps({**TRIAGE, "hypothesis_text": "a" * 900}), False, []))
+    assert len(out["hypothesis_text"]) == 500
+    with pytest.raises(ValidationError):
+        coerce_output("triage", json.dumps({**TRIAGE, "agent_name": "x" * 900}), False, [])
+
+
+def test_text_limits_match_contracts() -> None:
+    from soc_agents.contracts import EnrichmentResult, InvestigationResult, TimelineEntry, Vulnerability
+    from soc_agents.guard import TEXT_LIMITS
+
+    for model in (TriageResult, EnrichmentResult, InvestigationResult, TimelineEntry, Vulnerability):
+        for name, field in model.model_fields.items():
+            if name.endswith("_text"):
+                limit = next(m.max_length for m in field.metadata if hasattr(m, "max_length"))
+                assert TEXT_LIMITS[name] == limit, name

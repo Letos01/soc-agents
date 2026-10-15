@@ -63,12 +63,37 @@ def _text_of(response: LlmResponse) -> tuple[str | None, bool]:
     return (text or None), False
 
 
+# Free-text fields never drive control flow, so an over-long one is clipped instead of failing the investigation
+# (real models are verbose). Control fields are never clipped: a bad id or enum still fails closed.
+TEXT_LIMITS = {
+    "hypothesis_text": 500,
+    "assessment_text": 500,
+    "rule_description_text": 200,
+    "package_text": 200,
+    "summary_text": 200,
+}
+
+
+def _clip_text(value: Any) -> Any:
+    if isinstance(value, dict):
+        return {
+            k: (v[: TEXT_LIMITS[k] - 1] + "…" if len(v) > TEXT_LIMITS[k] else v)
+            if k in TEXT_LIMITS and isinstance(v, str)
+            else _clip_text(v)
+            for k, v in value.items()
+        }
+    if isinstance(value, list):
+        return [_clip_text(v) for v in value]
+    return value
+
+
 def coerce_output(role: str, text: str, injection: bool, reasons: list[str]) -> str:
     """Validate ``text`` against the role's contract, forcing the injection flag. Raises ContractViolation-ish."""
     model = OUTPUT_CONTRACTS[role]
     data = json.loads(_FENCE.sub("", text.strip()))
     if not isinstance(data, dict):
         raise ValueError("output is not a JSON object")
+    data = _clip_text(data)
     data["injection_suspected"] = bool(data.get("injection_suspected")) or injection
     if role == "triage":
         merged = list(dict.fromkeys([*(data.get("injection_reasons") or []), *reasons]))[:10]
@@ -176,6 +201,10 @@ class Guard:
                 role=self.role,
                 event="contract_violation",
                 detail=type(exc).__name__,
+                # field locations and error types only: values may carry attacker text
+                fields=[f"{'.'.join(map(str, e['loc']))}:{e['type']}" for e in exc.errors()][:10]
+                if isinstance(exc, ValidationError)
+                else [],
                 correlation_id=self._cid(state),
             )
             return _reply(f"{ERROR_PREFIX} {type(exc).__name__}")
