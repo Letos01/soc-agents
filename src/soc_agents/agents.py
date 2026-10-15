@@ -45,7 +45,9 @@ Severity guide: level 0-4 low, 5-7 medium, 8-11 high, 12+ critical.
 ROLE: context enrichment. The user message is a JSON request with correlation_id, agent_id and rule_id.
 Call get_agent(agent_id), get_rule(rule_id) and list_vulnerabilities(agent_id, limit=10).
 Output schema:
-{"agent_id": "<id>", "agent_name": "<name>", "agent_status": "active|disconnected|never_connected|pending",
+If get_agent fails (the agent may have been removed), use agent_status "unknown" and agent_name null.
+{"agent_id": "<id>", "agent_name": "<name or null>",
+ "agent_status": "active|disconnected|never_connected|pending|unknown",
  "os_platform": "<lowercase platform or empty>", "rule_description_text": "<=200 chars",
  "rule_groups": ["syslog"], "vulnerabilities": [{"cve": "CVE-2024-1234",
  "severity": "Critical|High|Medium|Low", "package_text": "<=200 chars"}], "injection_suspected": <bool>}

@@ -99,8 +99,8 @@ class Vulnerability(Contract):
 
 class EnrichmentResult(Contract):
     agent_id: AgentId
-    agent_name: Name
-    agent_status: Literal["active", "disconnected", "never_connected", "pending"]
+    agent_name: Name | None = None  # None when the agent is no longer registered (alerts outlive agents)
+    agent_status: Literal["active", "disconnected", "never_connected", "pending", "unknown"]
     os_platform: Annotated[str, StringConstraints(pattern=r"^[a-z0-9_]{0,32}$")] = ""
     rule_description_text: ShortText = ""
     rule_groups: Annotated[list[Name], Field(max_length=20)] = []
@@ -165,6 +165,7 @@ class Incident(Contract):
     created_at: Iso
     status: Literal["completed", "failed"]
     injection_suspected: bool
+    injection_stages: list[Literal["triage", "enrichment", "investigator"]] = []
     steps: int
     triage: TriageResult | None = None
     enrichment: EnrichmentResult | None = None
