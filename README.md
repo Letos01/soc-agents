@@ -174,7 +174,7 @@ Full analysis: [docs/threat-model.md](docs/threat-model.md). Design spec: [specs
 ```bash
 ruff check . && ruff format --check . && mypy
 pytest --cov                              # coverage gate: 85% (currently ~97%)
-SOC_LAB=1 pytest tests/e2e                # live lab, fake LLMs
+SOC_LAB=1 LAB_READER_PASSWORD=... pytest tests/e2e   # live lab, fake LLMs
 SOC_E2E=1 MODEL=gemini-2.5-flash pytest tests/e2e   # live lab, real model
 ```
 

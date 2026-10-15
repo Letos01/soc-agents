@@ -29,7 +29,9 @@ pytestmark = [pytest.mark.e2e, pytest.mark.skipif(not LAB, reason="set SOC_LAB=1
 
 @pytest.fixture()
 def lab(tmp_path: Path) -> Settings:
-    pw = os.environ.get("LAB_READER_PASSWORD", "Str0ng!ReaderPass")
+    pw = os.environ.get("LAB_READER_PASSWORD")
+    if not pw:
+        pytest.skip("set LAB_READER_PASSWORD (the mcp-reader password given to lab-create-readonly-users.sh)")
     env = {
         "WAZUH_API_URL": os.environ.get("WAZUH_API_URL", "https://localhost:55000"),
         "WAZUH_API_USER": "mcp-reader",
