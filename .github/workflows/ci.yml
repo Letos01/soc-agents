@@ -14,11 +14,11 @@ jobs:
       matrix:
         python: ["3.11", "3.12", "3.13"]
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
         with:
           path: soc-agents
       # The integration and adversarial suites drive the real mcp-wazuh server (against its mock backend).
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
         with:
           repository: Letos01/Mcp-wazuh
           path: mcp-wazuh
