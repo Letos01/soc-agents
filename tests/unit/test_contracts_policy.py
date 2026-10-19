@@ -150,3 +150,15 @@ def test_text_limits_match_contracts() -> None:
             if name.endswith("_text"):
                 limit = next(m.max_length for m in field.metadata if hasattr(m, "max_length"))
                 assert TEXT_LIMITS[name] == limit, name
+
+
+def test_neutralize_markdown() -> None:
+    from soc_agents.orchestrator import neutralize_markdown
+
+    out = neutralize_markdown(
+        "a ![i](https://x.example/p?d=1) b [link](http://y.example) <img src=x> c\n[r]: https://z.example\n"
+        "d ![ref][r] e https://w.example/path"
+    )
+    assert "https://" not in out and "http://" not in out
+    assert "<img" not in out and "![" not in out
+    assert "[imagem removida: i]" in out and "link (hxxp://y.example)" in out and "hxxps://w.example/path" in out

