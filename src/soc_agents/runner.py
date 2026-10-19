@@ -18,13 +18,16 @@ async def run_once(agent: BaseAgent, payload: dict[str, Any], *, max_llm_calls: 
     session = await runner.session_service.create_session(app_name=APP, user_id="orchestrator")
     message = types.Content(role="user", parts=[types.Part(text=json.dumps(payload))])
     final = ""
-    async for event in runner.run_async(
-        user_id="orchestrator",
-        session_id=session.id,
-        new_message=message,
-        run_config=RunConfig(max_llm_calls=max_llm_calls),
-    ):
-        if event.is_final_response() and event.content and event.content.parts:
-            final = "".join(p.text or "" for p in event.content.parts if not getattr(p, "thought", False))
-    await runner.close()
+    try:
+        async for event in runner.run_async(
+            user_id="orchestrator",
+            session_id=session.id,
+            new_message=message,
+            run_config=RunConfig(max_llm_calls=max_llm_calls),
+        ):
+            if event.is_final_response() and event.content and event.content.parts:
+                final = "".join(p.text or "" for p in event.content.parts if not getattr(p, "thought", False))
+    finally:
+        # Also on timeout/cancel: closing the runner stops the agent's MCP child process.
+        await runner.close()
     return final
