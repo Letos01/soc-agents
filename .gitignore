@@ -9,4 +9,5 @@ htmlcov/
 .env
 audit/
 incidents/
+data/
 dist/
