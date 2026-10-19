@@ -27,7 +27,7 @@ jobs:
           node-version: 22
       - run: npm ci && npm run build
         working-directory: mcp-wazuh
-      - uses: actions/setup-python@v5
+      - uses: actions/setup-python@v7
         with:
           python-version: ${{ matrix.python }}
       - run: pip install -e ".[dev]"
