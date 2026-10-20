@@ -1,0 +1,17 @@
+# Overlay for a host that already runs wazuh-docker + mcp-wazuh in HTTP mode:
+#   docker compose -f docker-compose.yml -f docker-compose.wazuh-net.yml up -d --build
+# Agents reach mcp-wazuh by name (MCP_WAZUH_URL=http://mcp-wazuh:8080/mcp in .env).
+x-net: &net
+  networks: [default, wazuh]
+
+services:
+  triage: *net
+  enrichment: *net
+  investigator: *net
+  reporter: *net
+  cli: *net
+
+networks:
+  wazuh:
+    external: true
+    name: ${WAZUH_DOCKER_NETWORK:-single-node_default}

@@ -90,6 +90,11 @@ soc-agents approve <incident-id> A1 --decision approve --by leo   # records the 
 
 With Docker: `docker compose up -d --build`, then `docker compose run --rm cli investigate --last 1h`.
 
+Next to a deployed mcp-wazuh (HTTP mode), skip stdio: set `MCP_WAZUH_URL` and `MCP_WAZUH_TOKEN` and join the
+Wazuh Docker network with `docker compose -f docker-compose.yml -f docker-compose.wazuh-net.yml up -d --build`.
+Every agent then reaches the same server with its own allowlist, and mcp-wazuh's audit log shows the soc-agents
+token as the caller.
+
 Two model profiles ship in `.env.example`, both through OpenRouter (`OPENROUTER_API_KEY`):
 
 | Profile | Settings | Use it when |
