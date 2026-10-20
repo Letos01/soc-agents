@@ -129,3 +129,23 @@ async def test_silent_agent_fails_with_a_clear_error(settings: Settings) -> None
     inc = await orch.investigate(alert_id="1792083033.1009")
     assert inc.status == "failed"
     assert "agent 'triage' returned no output" in inc.error
+
+
+async def test_a_flaky_agent_gets_one_retry(settings: Settings) -> None:
+    ids = await first_alert_ids(settings)
+    flaky = fakes.triage_fake()
+    flaky.bad_answers = 1
+    orch, _ = make_orchestrator(settings, triage=flaky)
+    inc = await orch.investigate(alert_id=ids["brute"])
+    assert inc.status == "completed", inc.error
+    assert inc.steps == 5  # 4 agents + 1 retry
+    assert any(r.get("event") == "retry" and r.get("agent") == "triage" for r in audit_rows(settings))
+
+
+async def test_a_second_bad_answer_still_fails_closed(settings: Settings) -> None:
+    ids = await first_alert_ids(settings)
+    broken = fakes.triage_fake()
+    broken.bad_answers = 2
+    orch, _ = make_orchestrator(settings, triage=broken)
+    inc = await orch.investigate(alert_id=ids["brute"])
+    assert inc.status == "failed" and inc.enrichment is None

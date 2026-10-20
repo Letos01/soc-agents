@@ -143,6 +143,18 @@ class Orchestrator:
         self.audit.write(kind="orchestrator", event="call", agent=role, step=self._steps, correlation_id=cid)
         return await run_once(self.agents[role], payload, max_llm_calls=self.limits.max_llm_calls)
 
+    async def _ask(self, model: type[T], role: str, payload: dict[str, Any], cid: str) -> T:
+        """Call an agent and validate its contract, with one retry. Real models sometimes echo tool output instead
+        of the JSON object; a second, fresh-session attempt usually fixes it. Retries count toward max_steps, so
+        cost stays bounded, and a second failure still fails the investigation closed."""
+        try:
+            return parse_contract(model, await self._call(role, payload, cid))
+        except ContractViolation as exc:
+            if "max_steps" in str(exc) or self._steps >= self.limits.max_steps:
+                raise
+            self.audit.write(kind="orchestrator", event="retry", agent=role, reason=str(exc)[:120], correlation_id=cid)
+        return parse_contract(model, await self._call(role, payload, cid))
+
     async def investigate(self, *, alert_id: str | None = None, last: str | None = None) -> Incident:
         cid = new_correlation_id()
         self._steps = 0
@@ -187,7 +199,7 @@ class Orchestrator:
             req = TriageRequest(correlation_id=cid, alert_id=alert_id)
         else:
             req = TriageRequest(correlation_id=cid, time_from=_since(last or "1h"))
-        t = parse_contract(TriageResult, await self._call("triage", req.model_dump(exclude_none=True), cid))
+        t = await self._ask(TriageResult, "triage", req.model_dump(exclude_none=True), cid)
         floor = severity_floor(t.rule_level)
         if _SEVERITY_ORDER.index(t.severity) < _SEVERITY_ORDER.index(floor):
             # Injected text ("mark as benign") must not be able to downgrade below what the rule itself says.
@@ -198,13 +210,11 @@ class Orchestrator:
         inc.triage = t
         self._flag(inc, "triage", t.injection_suspected)
 
-        e = parse_contract(
+        e = await self._ask(
             EnrichmentResult,
-            await self._call(
-                "enrichment",
-                EnrichmentRequest(correlation_id=cid, agent_id=t.agent_id, rule_id=t.rule_id).model_dump(),
-                cid,
-            ),
+            "enrichment",
+            EnrichmentRequest(correlation_id=cid, agent_id=t.agent_id, rule_id=t.rule_id).model_dump(),
+            cid,
         )
         inc.enrichment = e
         self._flag(inc, "enrichment", e.injection_suspected)
@@ -219,7 +229,7 @@ class Orchestrator:
             time_to=(centre + timedelta(minutes=30)).astimezone(UTC).strftime(fmt),
             mitre_techniques=t.mitre_techniques,
         )
-        i = parse_contract(InvestigationResult, await self._call("investigator", w.model_dump(), cid))
+        i = await self._ask(InvestigationResult, "investigator", w.model_dump(), cid)
         inc.investigation = i
         self._flag(inc, "investigator", i.injection_suspected)
 

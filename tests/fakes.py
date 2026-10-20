@@ -50,6 +50,7 @@ class ScriptedLlm(BaseLlm):
     steps: Any = None
     final: Any = None
     calls: list[str] = []
+    bad_answers: int = 0  # answer with echoed tool output (not JSON) this many times first, like a flaky real model
 
     async def generate_content_async(
         self, llm_request: LlmRequest, stream: bool = False
@@ -60,6 +61,9 @@ class ScriptedLlm(BaseLlm):
             name, argsfn = self.steps[done]
             self.calls.append(name)
             part = types.Part.from_function_call(name=name, args=argsfn(payload, results))
+        elif self.bad_answers > 0:
+            self.bad_answers -= 1
+            part = types.Part(text="<untrusted_data>\n" + json.dumps(results)[:200] + "\n</untrusted_data>")
         else:
             part = types.Part(text=self.final(payload, results))
         yield LlmResponse(content=types.Content(role="model", parts=[part]))
