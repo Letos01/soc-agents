@@ -7,6 +7,8 @@
 # A2A to a non-loopback host, and no other container on the host can reach the agents at all. Each agent is still
 # its own container and process with its own Agent Card and allowlist.
 x-agent: &agent
+  # One image for every service (cli included), so `up --build` can never leave the orchestrator on an old build.
+  image: soc-agents:local
   build: .
   env_file: .env
   environment:
