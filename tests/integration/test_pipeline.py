@@ -149,3 +149,15 @@ async def test_a_second_bad_answer_still_fails_closed(settings: Settings) -> Non
     orch, _ = make_orchestrator(settings, triage=broken)
     inc = await orch.investigate(alert_id=ids["brute"])
     assert inc.status == "failed" and inc.enrichment is None
+
+
+async def test_incident_summary_line_for_siem_ingestion(settings: Settings) -> None:
+    ids = await first_alert_ids(settings)
+    orch, _ = make_orchestrator(settings, triage=fakes.persuaded_triage(), reporter=fakes.reporter_fake(obey=True))
+    inc = await orch.investigate(alert_id=ids["fim"])
+    lines = (Path(settings.incidents_dir) / "incidents.jsonl").read_text().splitlines()
+    row = json.loads(lines[-1])
+    assert row["soc_agents_event"] == "incident" and row["incident_id"] == inc.incident_id
+    assert row["injection_suspected"] is True and row["actions_status"] == "requires_human_approval"
+    # only control fields: the persuaded model's free text and the reporter's body never reach the SIEM line
+    assert "approved" not in lines[-1] and "isolado" not in lines[-1] and "attacker.example" not in lines[-1]

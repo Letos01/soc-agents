@@ -251,6 +251,30 @@ class Orchestrator:
         if self.incidents_dir:
             self.incidents_dir.mkdir(parents=True, exist_ok=True)
             (self.incidents_dir / f"{inc.incident_id}.json").write_text(inc.model_dump_json(indent=2), encoding="utf-8")
+            # One flat JSON line per incident, for a SIEM to ingest (e.g. a Wazuh agent localfile with
+            # log_format json). Only validated control fields: no free text from logs or models.
+            with (self.incidents_dir / "incidents.jsonl").open("a", encoding="utf-8") as fh:
+                fh.write(json.dumps(incident_summary(inc)) + "\n")
+
+
+def incident_summary(inc: Incident) -> dict[str, Any]:
+    t = inc.triage
+    return {
+        "soc_agents_event": "incident",
+        "incident_id": inc.incident_id,
+        "status": inc.status,
+        "injection_suspected": inc.injection_suspected,
+        "injection_stages": ",".join(inc.injection_stages),
+        "severity": t.severity if t else "",
+        "alert_id": t.alert_id if t else "",
+        "alert_agent": t.agent_name if t else "",
+        "alert_rule_id": t.rule_id if t else 0,
+        "mitre": ",".join(t.mitre_techniques) if t else "",
+        "actions": ",".join(a.kind for a in inc.suggested_actions),
+        "actions_status": "requires_human_approval" if inc.suggested_actions else "",
+        "steps": inc.steps,
+        "error_type": inc.error.split(":", 1)[0] if inc.error else "",
+    }
 
 
 def _since(last: str) -> str:
