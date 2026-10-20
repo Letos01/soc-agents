@@ -262,7 +262,7 @@ def incident_summary(inc: Incident) -> dict[str, Any]:
     return {
         "soc_agents_event": "incident",
         "incident_id": inc.incident_id,
-        "status": inc.status,
+        "incident_status": inc.status,  # "status" is a reserved (static) field in Wazuh rules
         "injection_suspected": inc.injection_suspected,
         "injection_stages": ",".join(inc.injection_stages),
         "severity": t.severity if t else "",
