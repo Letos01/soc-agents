@@ -223,6 +223,11 @@ Full analysis: [docs/threat-model.md](docs/threat-model.md). Design spec: [specs
 - **The pipeline caught its own installer.** The first live investigation flagged the creation of the `caddy`
   user (the reverse proxy I had just installed) as likely persistence, with confidence 1.0. It is a false
   positive, and exactly why every action stays `requires_human_approval`.
+- **A fake that swallows errors hides schema drift.** The investigator sent `agent_id` to `alert_stats`, which
+  mcp-wazuh did not accept, so every call was rejected and the investigator quietly worked without stats. The
+  test fakes absorbed the error too. It surfaced only once mcp-wazuh's audit log was ingested into Wazuh, as a
+  wall of "AI agent request denied" alerts. mcp-wazuh 1.2.0 accepts the filter, and the fakes now fail the test
+  on any tool call the server rejects.
 - **Put the guarantees where a persuaded model can't reach them.** Severity floor, action list, banner and flag are
   all code. The models only write prose and fill schemas.
 

@@ -24,6 +24,19 @@ def user_payload(req: LlmRequest) -> dict[str, Any]:
     return {}
 
 
+def tool_errors(req: LlmRequest) -> dict[str, str]:
+    """name -> error text for every MCP tool call that came back as an error (isError)."""
+    out: dict[str, str] = {}
+    for c in req.contents:
+        for p in c.parts or []:
+            fr = p.function_response
+            resp = (fr.response or {}) if fr else {}
+            if resp.get("isError") or resp.get("is_error"):
+                text = " ".join(str(x.get("text", "")) for x in resp.get("content") or [] if isinstance(x, dict))
+                out[fr.name or ""] = text[:200]  # type: ignore[union-attr]
+    return out
+
+
 def tool_results(req: LlmRequest) -> dict[str, Any]:
     """name -> parsed ``result`` (or the error dict) for every function_response already in the history."""
     out: dict[str, Any] = {}
@@ -51,11 +64,17 @@ class ScriptedLlm(BaseLlm):
     final: Any = None
     calls: list[str] = []
     bad_answers: int = 0  # answer with echoed tool output (not JSON) this many times first, like a flaky real model
+    # Strict by default: a tool call the server rejects (bad arguments, schema drift) fails the test instead of
+    # being silently absorbed. Only tools listed here may legitimately error (e.g. an agent no longer enrolled).
+    tolerated_errors: frozenset[str] = frozenset()
 
     async def generate_content_async(
         self, llm_request: LlmRequest, stream: bool = False
     ) -> AsyncGenerator[LlmResponse, None]:
         payload, results = user_payload(llm_request), tool_results(llm_request)
+        unexpected = {k: v for k, v in tool_errors(llm_request).items() if k not in self.tolerated_errors}
+        if unexpected:
+            raise AssertionError(f"MCP tool call(s) rejected by the server: {unexpected}")
         done = len(results)
         if done < len(self.steps):
             name, argsfn = self.steps[done]
@@ -131,6 +150,7 @@ def enrichment_fake() -> ScriptedLlm:
         )
 
     return ScriptedLlm(
+        tolerated_errors=frozenset({"get_agent"}),
         steps=[
             ("get_agent", lambda p, r: {"agent_id": p["agent_id"]}),
             ("get_rule", lambda p, r: {"rule_id": p["rule_id"]}),
