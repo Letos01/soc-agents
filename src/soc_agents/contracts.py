@@ -125,6 +125,7 @@ class TimelineEntry(Contract):
     timestamp: Iso
     rule_id: Annotated[int, Field(ge=1, le=999_999)]
     rule_level: Annotated[int, Field(ge=0, le=15)]
+    mitre_techniques: Annotated[list[Technique], Field(max_length=5)] = []
     summary_text: ShortText = ""
 
 

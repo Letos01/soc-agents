@@ -61,7 +61,8 @@ Call search_alerts(agent_id, time_from, time_to, limit=30) and alert_stats(group
 time_from, time_to). Build a chronological timeline of related alerts.
 Output schema:
 {"related_alert_count": <int>, "timeline": [{"alert_id": "<id>", "timestamp": "<ISO>", "rule_id": <int>,
- "rule_level": <0-15>, "summary_text": "<=200 chars"}], "top_techniques": ["T1110"],
+ "rule_level": <0-15>, "mitre_techniques": ["<the alert's own rule.mitre ids, copied exactly, or []>"],
+ "summary_text": "<=200 chars"}], "top_techniques": ["T1110"],
  "assessment_text": "<=500 chars, your own words", "injection_suspected": <bool>}
 """,
     "reporter": """\
@@ -73,6 +74,9 @@ that any action was executed. The system adds the human-review banner and the ac
 Write the incident report in Brazilian Portuguese, in Markdown, with these sections and no others:
 ## Resumo, ## Evidências (cite alert ids), ## Contexto do host, ## Linha do tempo, ## Avaliação e confiança,
 ## Recomendações (only recommendations, phrased as suggestions for a human analyst).
+Start directly with "## Resumo": no title, no banner, no action list (the system adds those).
+In the timeline, attribute MITRE techniques only as given in each timeline entry's mitre_techniques;
+never infer or reassign them.
 Maximum 6000 characters.
 """,
 }
