@@ -215,6 +215,14 @@ Full analysis: [docs/threat-model.md](docs/threat-model.md). Design spec: [specs
   the router when you are happy for it to choose, and use `excluded_models` (which is enforced) to rule models out.
 - **Redaction by key name is blunt.** The audit redacts keys that look secret, and `tokens` matched `token`, so token
   usage was being logged as `[redacted]`. Renamed to `usage`. Test what the audit actually records.
+- **Deploying is a different test suite.** On a real host three things broke that no local run showed. ADK
+  refuses plain-http A2A to a non-loopback host, and the remote agent just returned nothing, so agents now share
+  one network namespace and talk over 127.0.0.1 (which also hides A2A from every other container). With 7,642 real
+  CVEs in the tool output, Gemini Flash sometimes echoed the tool output instead of the JSON, so each agent gets one
+  bounded retry. And 30 real alerts blew the 60k token budget, now 160k. All three failed closed, as designed.
+- **The pipeline caught its own installer.** The first live investigation flagged the creation of the `caddy`
+  user (the reverse proxy I had just installed) as likely persistence, with confidence 1.0. It is a false
+  positive, and exactly why every action stays `requires_human_approval`.
 - **Put the guarantees where a persuaded model can't reach them.** Severity floor, action list, banner and flag are
   all code. The models only write prose and fill schemas.
 
