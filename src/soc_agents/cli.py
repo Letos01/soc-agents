@@ -3,14 +3,20 @@ from __future__ import annotations
 import argparse
 import asyncio
 import json
+import logging
 import sys
+import warnings
 
-from google.adk.agents import BaseAgent
+# ADK marks its A2A support as experimental and warns on every use; the CLI should print the report only.
+warnings.filterwarnings("ignore", category=UserWarning, module=r"(google\.adk|soc_agents)(\..*)?")
 
-from soc_agents.agents import build_agent
-from soc_agents.audit import Audit
-from soc_agents.config import ROLES, Settings
-from soc_agents.orchestrator import PIPELINE, Orchestrator
+# Imports below come after the filter on purpose: ADK emits one of the warnings at import time.
+from google.adk.agents import BaseAgent  # noqa: E402
+
+from soc_agents.agents import build_agent  # noqa: E402
+from soc_agents.audit import Audit  # noqa: E402
+from soc_agents.config import ROLES, Settings  # noqa: E402
+from soc_agents.orchestrator import PIPELINE, Orchestrator  # noqa: E402
 
 
 def _remote_agents(settings: Settings) -> dict[str, BaseAgent]:
@@ -26,6 +32,7 @@ def _local_agents(settings: Settings, audit: Audit) -> dict[str, BaseAgent]:
 
 
 async def _investigate(args: argparse.Namespace) -> int:
+    logging.getLogger("google_adk").setLevel(logging.ERROR)  # e.g. "Ignoring a session state delta ..."
     settings = Settings.from_env()
     audit = Audit(settings.audit_path)
     agents = _local_agents(settings, audit) if args.local else _remote_agents(settings)
