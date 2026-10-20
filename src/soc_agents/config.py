@@ -26,7 +26,7 @@ class Limits:
     timeout_s: float = 120.0
     max_llm_calls: int = 8
     max_tool_calls: int = 6
-    token_budget: int = 60000
+    token_budget: int = 160000
 
     @property
     def per_agent_tokens(self) -> int:
@@ -63,7 +63,7 @@ class Settings:
             timeout_s=float(e.get("INVESTIGATION_TIMEOUT_S", 120)),
             max_llm_calls=int(e.get("MAX_LLM_CALLS", 8)),
             max_tool_calls=int(e.get("MAX_TOOL_CALLS", 6)),
-            token_budget=int(e.get("TOKEN_BUDGET", 60000)),
+            token_budget=int(e.get("TOKEN_BUDGET", 160000)),
         )
         ports = {r: int(e.get(f"{r.upper()}_PORT", DEFAULT_PORTS[r])) for r in ROLES}
         return cls(

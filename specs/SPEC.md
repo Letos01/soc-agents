@@ -96,7 +96,7 @@ papel, nome da tool, parâmetros (chaves sensíveis redigidas), resultado (`ok|d
 ## 9. Limites
 
 `MAX_STEPS` (padrão 6 chamadas de agente), `INVESTIGATION_TIMEOUT_S` (120), `MAX_LLM_CALLS` por agente (8),
-`TOKEN_BUDGET` por investigação (60000), `MAX_TOOL_CALLS` por agente (6).
+`TOKEN_BUDGET` por investigação (160000; 60000 não bastou para dados reais: o investigator usou ~15,6k só com 30 alertas), `MAX_TOOL_CALLS` por agente (6).
 
 ## 10. Testes e critérios de aceite
 
