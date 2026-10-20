@@ -39,6 +39,9 @@ class Settings:
     model: str = "gemini-2.5-flash"
     model_extra_body: str = ""  # JSON object sent with every LiteLLM request (e.g. OpenRouter router plugins)
     mcp_path: str = "../mcp-wazuh/dist/index.js"
+    # When set, agents use a running mcp-wazuh over Streamable HTTP instead of spawning one over stdio.
+    mcp_url: str = ""
+    mcp_token: str = ""
     node: str = "node"
     wazuh_env: Mapping[str, str] = field(default_factory=dict)
     host: str = "127.0.0.1"
@@ -67,6 +70,8 @@ class Settings:
             model=e.get("MODEL", "gemini-2.5-flash"),
             model_extra_body=e.get("MODEL_EXTRA_BODY", ""),
             mcp_path=e.get("MCP_WAZUH_PATH", "../mcp-wazuh/dist/index.js"),
+            mcp_url=e.get("MCP_WAZUH_URL", ""),
+            mcp_token=e.get("MCP_WAZUH_TOKEN", ""),
             node=e.get("NODE_BIN", "node"),
             wazuh_env={k: e[k] for k in _WAZUH_KEYS if k in e},
             host=e.get("AGENT_HOST", "127.0.0.1"),

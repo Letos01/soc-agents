@@ -5,7 +5,7 @@ from __future__ import annotations
 from typing import Any
 
 from google.adk.agents import LlmAgent
-from google.adk.tools.mcp_tool import McpToolset, StdioConnectionParams
+from google.adk.tools.mcp_tool import McpToolset, StdioConnectionParams, StreamableHTTPConnectionParams
 from mcp import StdioServerParameters
 
 from soc_agents.audit import Audit
@@ -80,6 +80,17 @@ Maximum 6000 characters.
 def build_toolset(role: str, settings: Settings) -> McpToolset | None:
     if not ALLOWLIST[role]:
         return None
+    if settings.mcp_url:
+        if not settings.mcp_token:
+            raise ValueError("MCP_WAZUH_TOKEN is required with MCP_WAZUH_URL")
+        return McpToolset(
+            connection_params=StreamableHTTPConnectionParams(
+                url=settings.mcp_url,
+                headers={"Authorization": f"Bearer {settings.mcp_token}"},
+                timeout=20.0,
+            ),
+            tool_filter=tool_filter(role),
+        )
     params = StdioServerParameters(
         command=settings.node,
         args=[settings.mcp_path],
