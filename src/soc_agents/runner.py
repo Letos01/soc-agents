@@ -10,6 +10,8 @@ from google.adk.agents.run_config import RunConfig
 from google.adk.runners import InMemoryRunner
 from google.genai import types
 
+from soc_agents.contracts import ContractViolation
+
 APP = "soc-agents"
 
 
@@ -30,4 +32,8 @@ async def run_once(agent: BaseAgent, payload: dict[str, Any], *, max_llm_calls: 
     finally:
         # Also on timeout/cancel: closing the runner stops the agent's MCP child process.
         await runner.close()
+    if not final.strip():
+        # A remote agent that fails (unreachable, refused card, crashed) can end with no content and no error
+        # event; say so instead of letting it surface as a JSON parse error.
+        raise ContractViolation(f"agent '{agent.name}' returned no output")
     return final

@@ -120,3 +120,12 @@ async def test_contract_violation_fails_closed(settings: Settings) -> None:
     inc = await orch.investigate(alert_id=ids["brute"])
     assert inc.status == "failed" and inc.error.startswith("ContractViolation")
     assert inc.enrichment is None, "later agents must not run after a bad contract"
+
+
+async def test_silent_agent_fails_with_a_clear_error(settings: Settings) -> None:
+    silent = fakes.triage_fake()
+    silent.steps, silent.final = [], (lambda p, r: "")
+    orch, _ = make_orchestrator(settings, triage=silent)
+    inc = await orch.investigate(alert_id="1792083033.1009")
+    assert inc.status == "failed"
+    assert "agent 'triage' returned no output" in inc.error
