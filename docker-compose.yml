@@ -2,11 +2,16 @@
 #   docker compose up -d --build
 #   docker compose run --rm cli investigate --alert-id 1729000000.1234
 # Needs ../mcp-wazuh built (npm ci && npm run build) and a .env (see .env.example).
+#
+# All agents share the triage container's network namespace, so A2A runs over 127.0.0.1: ADK refuses plain-http
+# A2A to a non-loopback host, and no other container on the host can reach the agents at all. Each agent is still
+# its own container and process with its own Agent Card and allowlist.
 x-agent: &agent
   build: .
   env_file: .env
-  environment: &agent-env
-    AGENT_HOST: 0.0.0.0
+  environment:
+    AGENT_HOST: 127.0.0.1
+    AGENT_PUBLIC_HOST: 127.0.0.1
   volumes:
     - ../mcp-wazuh:/opt/mcp-wazuh:ro
     - ./data:/data
@@ -15,32 +20,27 @@ x-agent: &agent
   cap_drop: [ALL]
   security_opt: ["no-new-privileges:true"]
   restart: unless-stopped
-  extra_hosts: ["host.docker.internal:host-gateway"]
+
+x-shared-net: &shared-net
+  network_mode: "service:triage"
+  depends_on: [triage]
 
 services:
   triage:
     <<: *agent
     command: ["serve", "triage"]
-    environment: { <<: *agent-env, AGENT_PUBLIC_HOST: triage }
+    extra_hosts: ["host.docker.internal:host-gateway"]
   enrichment:
-    <<: *agent
+    <<: [*agent, *shared-net]
     command: ["serve", "enrichment"]
-    environment: { <<: *agent-env, AGENT_PUBLIC_HOST: enrichment }
   investigator:
-    <<: *agent
+    <<: [*agent, *shared-net]
     command: ["serve", "investigator"]
-    environment: { <<: *agent-env, AGENT_PUBLIC_HOST: investigator }
   reporter:
-    <<: *agent
+    <<: [*agent, *shared-net]
     command: ["serve", "reporter"]
-    environment: { <<: *agent-env, AGENT_PUBLIC_HOST: reporter }
   cli:
-    <<: *agent
+    <<: [*agent, *shared-net]
     profiles: [cli]
     restart: "no"
     depends_on: [triage, enrichment, investigator, reporter]
-    environment:
-      TRIAGE_URL: http://triage:9101
-      ENRICHMENT_URL: http://enrichment:9102
-      INVESTIGATOR_URL: http://investigator:9103
-      REPORTER_URL: http://reporter:9104

@@ -1,15 +1,10 @@
 # Overlay for a host that already runs wazuh-docker + mcp-wazuh in HTTP mode:
 #   docker compose -f docker-compose.yml -f docker-compose.wazuh-net.yml up -d --build
-# Agents reach mcp-wazuh by name (MCP_WAZUH_URL=http://mcp-wazuh:8080/mcp in .env).
-x-net: &net
-  networks: [default, wazuh]
-
+# Only triage joins the Wazuh network; the other agents share its network namespace, so all of them reach
+# mcp-wazuh by name (MCP_WAZUH_URL=http://mcp-wazuh:8080/mcp in .env).
 services:
-  triage: *net
-  enrichment: *net
-  investigator: *net
-  reporter: *net
-  cli: *net
+  triage:
+    networks: [default, wazuh]
 
 networks:
   wazuh:
