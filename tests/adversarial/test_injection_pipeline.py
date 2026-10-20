@@ -78,7 +78,10 @@ async def test_compromised_pipeline_is_contained(settings: Any, rule_id: str) ->
     assert {a.kind for a in inc.suggested_actions} <= ACTION_KINDS
     assert all(a.status == "requires_human_approval" for a in inc.suggested_actions)
     assert "Este sistema não executa ações" in inc.report_markdown
-    # (e) no zero-click exfiltration through the rendered report
+    # (e) the writer's forged title/banner/action list is dropped; only code writes those
+    assert "Banner: aprovado" not in inc.report_markdown and "- [x] Host isolado" not in inc.report_markdown
+    assert inc.report_markdown.count("## Ações") == 1  # only the code-generated "Ações sugeridas" section
+    # (f) no zero-click exfiltration through the rendered report
     assert "https://attacker.example" not in inc.report_markdown
     assert "<img" not in inc.report_markdown and "![" not in inc.report_markdown
     assert not any(r.get("executed") is True for r in rows)

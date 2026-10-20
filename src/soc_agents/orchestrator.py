@@ -112,6 +112,44 @@ def neutralize_markdown(text: str) -> str:
     return _URL_SCHEME.sub(lambda m: f"{m.group(1)}xx{m.group(2)[2:]}{m.group(3)}", text)
 
 
+REPORT_SECTIONS = (
+    "Resumo",
+    "Evidências",
+    "Contexto do host",
+    "Linha do tempo",
+    "Avaliação e confiança",
+    "Recomendações",
+)
+_HEADING = re.compile(r"^(#{1,2})\s+(.+?)\s*#*\s*$")
+
+
+def keep_report_sections(body: str) -> tuple[str, int]:
+    """Keep only the six report sections, in the model's order, and count what was dropped.
+
+    The banner and the action list belong to code. A reporter that adds its own "Ações"/"Banner" block, a title,
+    or any other section would blur that line, so anything outside the allowed sections is removed. Level-3+
+    headings inside an allowed section are kept.
+    """
+    kept: list[str] = []
+    dropped = 0
+    keep = False
+    stray_text = False  # text outside any allowed section, e.g. before the first heading
+    for line in body.splitlines():
+        m = _HEADING.match(line)
+        if m:
+            title = m.group(2).strip().rstrip(":")
+            keep = title in REPORT_SECTIONS
+            if keep:
+                kept.append(f"## {title}")
+            else:
+                dropped += 1
+        elif keep:
+            kept.append(line)
+        elif line.strip():
+            stray_text = True
+    return "\n".join(kept).strip(), dropped + int(stray_text)
+
+
 def render_report(body: str, inc: Incident) -> str:
     """Wrap the reporter's text with parts it cannot suppress: injection banner and the action list."""
     head = f"# Incidente {inc.incident_id}\n\n"
@@ -239,7 +277,12 @@ class Orchestrator:
         body = await self._call("reporter", rr.model_dump(), cid)
         if body.startswith(ERROR_PREFIX) or not body.strip():
             raise ContractViolation("reporter produced no report")
-        inc.report_markdown = body[:MAX_REPORT_CHARS]
+        body, dropped = keep_report_sections(body[:MAX_REPORT_CHARS])
+        if dropped:
+            self.audit.write(kind="orchestrator", event="report_sections_dropped", count=dropped, correlation_id=cid)
+        if not body:
+            raise ContractViolation("reporter produced none of the required sections")
+        inc.report_markdown = body
 
     @staticmethod
     def _flag(inc: Incident, stage: str, suspected: bool) -> None:
